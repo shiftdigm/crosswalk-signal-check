@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>합정 신호 현장확인</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* 레이아웃: 상단 교차로 탭 → 방향별 신호 행(나침반 화살표·상태·카운트다운·탭 버튼) → 대조 기록 */
+:root{
+  --bg:#f3f5f4; --surface:#ffffff; --fg:#17201c; --muted:#5d6b65; --line:#d8dfdb;
+  --walk:#0f8a4b; --walk-bg:#e2f4ea; --blink:#b7791f; --blink-bg:#fbf0dc; --stop:#c0392b; --stop-bg:#fbe7e4;
+  --accent:#1f5f8b;
+  --sans:"IBM Plex Sans KR",system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#101513; --surface:#18201c; --fg:#e8eeea; --muted:#9aa8a1; --line:#2b3530;
+  --walk:#3ccf7f; --walk-bg:#163525; --blink:#e8b04a; --blink-bg:#3a2d14; --stop:#ff7262; --stop-bg:#3c1d19;
+  --accent:#7cb8e6; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 var(--sans);
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:max(24px,env(safe-area-inset-bottom,0px));
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding-block:16px}
+h1{font-size:20px;margin:0;font-weight:700;letter-spacing:-.01em}
+.sub{color:var(--muted);font-size:13px;margin:0}
+.tabs{display:flex;gap:8px;flex-wrap:wrap}
+.tab{flex:1 1 0;min-width:0;border:1px solid var(--line);background:var(--surface);color:var(--fg);
+  border-radius:10px;padding:10px 8px;font:600 14px var(--sans);cursor:pointer}
+.tab small{display:block;font:500 11px var(--mono);color:var(--muted)}
+.tab[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.btn{border:0;border-radius:10px;padding:10px 14px;font:600 14px var(--sans);cursor:pointer;background:var(--accent);color:var(--bg)}
+.btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--line)}
+.meta{font:500 12px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.rows{display:flex;flex-direction:column;gap:8px}
+.row{display:grid;grid-template-columns:44px 1fr auto;align-items:center;gap:12px;
+  background:var(--surface);border:1px solid var(--line);border-left:6px solid var(--line);border-radius:10px;padding:10px 12px}
+.row.walk{border-left-color:var(--walk)} .row.blink{border-left-color:var(--blink)} .row.stop{border-left-color:var(--stop)}
+.arrow{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:var(--bg);font-size:20px}
+.arrow span{display:inline-block;line-height:1}
+.dir{font-weight:600}
+.state{font-size:13px;color:var(--muted)}
+.row.walk .state{color:var(--walk)} .row.blink .state{color:var(--blink)} .row.stop .state{color:var(--stop)}
+.count{font:600 28px var(--mono);font-variant-numeric:tabular-nums;text-align:right;min-width:3.5ch}
+.count small{font-size:12px;color:var(--muted);display:block;font-weight:500}
+.tap{grid-column:1/-1;border:1px dashed var(--line);background:transparent;color:var(--fg);border-radius:8px;padding:8px;font:600 13px var(--sans);cursor:pointer}
+.tap:active{background:var(--walk-bg)}
+.note{font-size:13px;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.err{color:var(--stop)}
+table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:6px 4px;border-bottom:1px solid var(--line)}
+th{color:var(--muted);font-weight:600}
+td.num{font-family:var(--mono);text-align:right}
+.logwrap{overflow-x:auto}
+h2{font-size:15px;margin:8px 0 0}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>합정 신호 현장확인</h1>
+    <p class="sub">합정역 → 우리은행 서교동지점 경로 · 보행신호 실시간</p>
+  </header>
+
+  <div class="tabs" role="group" aria-label="교차로">
+    <button class="tab" id="tab-3852" data-id="3852">합정역<small>3852</small></button>
+    <button class="tab" id="tab-4266" data-id="4266">합정역3번출구<small>4266</small></button>
+    <button class="tab" id="tab-2229" data-id="2229">서교동사거리<small>2229</small></button>
+  </div>
+
+  <div class="bar">
+    <button class="btn" id="toggle">조회 시작</button>
+    <span class="meta" id="meta">대기 중</span>
+  </div>
+
+  <div class="rows" id="rows"><div class="note">조회 시작을 누르면 이 교차로의 방향별 보행신호가 나타납니다. 5초마다 갱신하고 그 사이는 휴대폰에서 초를 셉니다. 10분 뒤 자동으로 멈춥니다.</div></div>
+
+  <div class="note">횡단보도가 <b>초록으로 바뀌는 순간</b> 그 방향의 "지금 초록 됨"을 누르세요. 앱이 예측한 시각과 차이를 아래에 기록합니다. 화살표 방향은 API 기준 방위(북쪽이 위)이고, 실제 어느 횡단보도인지 맞추는 게 이번 확인의 목적입니다.</div>
+
+  <section>
+    <h2>대조 기록</h2>
+    <div class="logwrap"><table id="log"><thead><tr><th>시각</th><th>교차로·방향</th><th class="num">예측 차이</th></tr></thead><tbody></tbody></table></div>
+    <div class="bar" style="margin-top:8px">
+      <button class="btn ghost" id="copy">기록 복사</button>
+      <button class="btn ghost" id="clear">기록 지우기</button>
+      <span class="meta" id="copymsg"></span>
+    </div>
+  </section>
+</main>
+
+<script>
+const FN = "https://lahzopffaqjaaesjtnrp.supabase.co/functions/v1/signal";
+const ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhaHpvcGZmYXFqYWFlc2p0bnJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ0MDIzNjQsImV4cCI6MjA5OTk3ODM2NH0.2fZ_qznKJEurEf15m-koy_Fnr2rFCYfSHRgWQxx3nTw";
+const NAMES = {"3852":"합정역","4266":"합정역3번출구","2229":"서교동사거리"};
+const DIRS = [["nt","북",0],["ne","북동",45],["et","동",90],["se","남동",135],["st","남",180],["sw","남서",225],["wt","서",270],["nw","북서",315]];
+const UNKNOWN = 36001, POLL_MS = 5000, MAX_MS = 10*60*1000;
+const S = {id:"3852", rec:null, prev:{}, changedAt:{}, timer:null, startedAt:0, calls:0, lag:null, err:null, log:[]};
+
+try{ S.log = JSON.parse(localStorage.getItem("cw-log")||"[]"); }catch(e){}
+try{ const t = localStorage.getItem("cw-tab"); if(NAMES[t]) S.id = t; }catch(e){}
+
+const $ = s => document.querySelector(s);
+const fmt = ms => { const d = new Date(ms), p = n => String(n).padStart(2,"0"); return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; };
+
+function stateOf(name){
+  if(name==="protected-Movement-Allowed") return ["walk","초록"];
+  if(name==="permissive-Movement-Allowed") return ["blink","초록 점멸"];
+  if(name==="stop-And-Remain") return ["stop","빨강"];
+  return ["", name||"-"];
+}
+
+async function poll(){
+  if(Date.now()-S.startedAt > MAX_MS){ stop(); return; }
+  try{
+    const r = await fetch(`${FN}?ids=${S.id}`,{headers:{Authorization:`Bearer ${ANON}`}});
+    S.calls++;
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.error||r.status);
+    const rec = j.data[S.id];
+    if(!rec || rec.error) throw new Error("교차로 응답 없음 "+(rec&&rec.error||""));
+    // 상태 전환 시각 기록(잔여시간 미정 교차로용)
+    DIRS.forEach(([k])=>{
+      const st = rec[k+"PdsgStatNm"];
+      const key = S.id+k;
+      if(st && S.prev[key] && S.prev[key]!==st) S.changedAt[key] = rec.trsmUtcTime;
+      if(st) S.prev[key] = st;
+    });
+    S.rec = rec; S.lag = (j.serverMs - rec.trsmUtcTime)/1000; S.err = null;
+  }catch(e){ S.err = e.message; }
+  render();
+}
+
+function start(){
+  if(S.timer) return;
+  S.startedAt = Date.now(); poll();
+  S.timer = setInterval(poll, POLL_MS);
+  $("#toggle").textContent = "조회 멈춤";
+}
+function stop(){
+  clearInterval(S.timer); S.timer = null;
+  $("#toggle").textContent = "조회 시작";
+  render();
+}
+
+function changeAt(k){
+  const rm = S.rec && S.rec[k+"PdsgRmdrCs"];
+  if(rm==null || rm===UNKNOWN) return null;
+  return S.rec.trsmUtcTime + rm*100;
+}
+
+function countOf(k, cls, now){
+  const at = changeAt(k);
+  if(at) return [Math.max(0,Math.ceil((at-now)/1000)), cls==="stop"?"초 뒤 초록":"초 남음"];
+  const ch = S.changedAt[S.id+k];
+  return ch ? [Math.floor((now-ch)/1000), "초 지남(잔여 미정)"] : ["–", "잔여 미정"];
+}
+function tick(){
+  const now = Date.now();
+  document.querySelectorAll(".count[data-k]").forEach(el=>{
+    const [c, cap] = countOf(el.dataset.k, el.dataset.cls, now);
+    if(el.firstChild.nodeValue !== String(c)) el.firstChild.nodeValue = c;
+    el.lastChild.textContent = cap;
+  });
+}
+function render(){
+  const meta = S.timer
+    ? `갱신 ${S.rec?fmt(S.rec.trsmUtcTime):"-"} · 지연 ${S.lag!=null?S.lag.toFixed(1):"-"}초 · 호출 ${S.calls}회`
+    : (S.calls?`멈춤 · 호출 ${S.calls}회`:"대기 중");
+  $("#meta").textContent = S.err ? "" : meta;
+  if(S.err){ $("#meta").innerHTML = `<span class="err">오류: ${S.err}</span>`; }
+  if(!S.rec || S.rec.itstId!==S.id) return;
+  const rows = DIRS.filter(([k])=>S.rec[k+"PdsgStatNm"]);
+  if(!rows.length){ $("#rows").innerHTML = `<div class="note">이 교차로에는 보행신호 정보가 없습니다.</div>`; return; }
+  const now = Date.now();
+  $("#rows").innerHTML = rows.map(([k,ko,deg])=>{
+    const [cls,label] = stateOf(S.rec[k+"PdsgStatNm"]);
+    const at = changeAt(k);
+    const [count, cap] = countOf(k, cls, now);
+    return `<div class="row ${cls}">
+      <div class="arrow" aria-hidden="true"><span style="transform:rotate(${deg}deg)">↑</span></div>
+      <div><div class="dir">${ko} 방향</div><div class="state">${label}</div></div>
+      <div class="count" data-k="${k}" data-cls="${cls}">${count}<small>${cap}</small></div>
+      <button class="tap" data-k="${k}" data-ko="${ko}">${ko} — 지금 초록 됨</button>
+    </div>`;
+  }).join("");
+}
+
+function renderLog(){
+  $("#log tbody").innerHTML = S.log.slice().reverse().map(l=>
+    `<tr><td>${fmt(l.t)}</td><td>${NAMES[l.id]} ${l.ko}</td><td class="num">${l.diff==null?"예측없음":(l.diff>0?"+":"")+l.diff.toFixed(1)+"초"}</td></tr>`).join("")
+    || `<tr><td colspan="3" class="sub">아직 기록이 없습니다.</td></tr>`;
+}
+
+// 초록 전환 탭: 직전 적색일 때의 예측 전환시각과 비교 (양수 = 실제가 예측보다 늦음)
+let lastPred = {};
+setInterval(()=>{
+  if(S.rec){ DIRS.forEach(([k])=>{ if(S.rec[k+"PdsgStatNm"]==="stop-And-Remain"){ const a=changeAt(k); if(a) lastPred[S.id+k]=a; } }); }
+  if(S.timer) tick();
+}, 250);
+
+document.addEventListener("pointerdown", e=>{
+  const tap = e.target.closest(".tap");
+  if(!tap) return;
+  e.preventDefault();
+  const k = tap.dataset.k, t = Date.now();
+  const p = lastPred[S.id+k];
+  const diff = p && Math.abs(t-p) < 60000 ? (t-p)/1000 : null;
+  S.log.push({t, id:S.id, k, ko:tap.dataset.ko, diff});
+  try{ localStorage.setItem("cw-log", JSON.stringify(S.log)); }catch(err){}
+  renderLog(); tap.textContent = "기록됨 ✓"; setTimeout(()=>{ tap.textContent = tap.dataset.ko+" — 지금 초록 됨"; }, 1500);
+});
+document.addEventListener("click", e=>{
+  const tab = e.target.closest(".tab");
+  if(tab){
+    S.id = tab.dataset.id; S.rec = null; lastPred = {};
+    try{ localStorage.setItem("cw-tab", S.id); }catch(err){}
+    document.querySelectorAll(".tab").forEach(b=>b.setAttribute("aria-pressed", b===tab));
+    $("#rows").innerHTML = `<div class="note">${S.timer?"불러오는 중…":"조회 시작을 누르세요."}</div>`;
+    if(S.timer) poll();
+  }
+});
+$("#toggle").onclick = ()=> S.timer ? stop() : start();
+$("#clear").onclick = ()=>{ if($("#clear").dataset.c){ S.log=[]; try{localStorage.removeItem("cw-log");}catch(e){} renderLog(); $("#clear").textContent="기록 지우기"; delete $("#clear").dataset.c; } else { $("#clear").dataset.c=1; $("#clear").textContent="한 번 더 누르면 삭제"; } };
+$("#copy").onclick = async ()=>{
+  const txt = S.log.map(l=>[new Date(l.t).toISOString(), l.id, NAMES[l.id], l.k, l.ko, l.diff==null?"":l.diff.toFixed(2)].join("\t")).join("\n");
+  try{ await navigator.clipboard.writeText(txt); $("#copymsg").textContent="복사됨"; }catch(e){ $("#copymsg").textContent="복사 실패"; }
+};
+document.addEventListener("visibilitychange", ()=>{ if(document.hidden && S.timer) stop(); });
+document.querySelectorAll(".tab").forEach(b=>b.setAttribute("aria-pressed", b.dataset.id===S.id));
+renderLog();
+</script>
+</body>
+</html>
